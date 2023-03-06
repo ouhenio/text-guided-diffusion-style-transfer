@@ -9,3 +9,4 @@ Some stuff to take into account:
   - [DDPM + CLIP notebook](https://colab.research.google.com/drive/1V66mUeJbXrTuQITvJunvnWVn96FEbSI3#scrollTo=X5gODNAMEUCR).
   - Code [reference of directional loss](https://github.com/rinongal/StyleGAN-nada/blob/main/ZSSGAN/criteria/clip_loss.py) (eq 8).
   - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
+  - wtf does the noise estimator come from?
