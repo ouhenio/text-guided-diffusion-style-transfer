@@ -8,3 +8,4 @@ Some stuff to take into account:
   - All the images are resized to 256 × 256 for the diffusion models. For patch-based guidance, we randomly crop 96 patches from a source image and then apply perspective augmentation and affine transformation.
   - [DDPM + CLIP notebook](https://colab.research.google.com/drive/1V66mUeJbXrTuQITvJunvnWVn96FEbSI3#scrollTo=X5gODNAMEUCR).
   - Code [reference of directional loss](https://github.com/rinongal/StyleGAN-nada/blob/main/ZSSGAN/criteria/clip_loss.py) (eq 8).
+  - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
