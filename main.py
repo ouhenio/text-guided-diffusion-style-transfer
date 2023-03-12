@@ -6,7 +6,8 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
-from guided_diffusion.script_util import create_model_and_diffusion, model_and_diffusion_defaults
+
+from guided_diffusion.script_util import create_model_and_diffusion, model_and_diffusion_defaults, NUM_CLASSES
 
 model_config = model_and_diffusion_defaults()
 model_config.update({
@@ -124,12 +125,12 @@ for i in range(n_batches):
         model,
         (batch_size, 3, model_config['image_size'], model_config['image_size']),
         clip_denoised=False,
-        model_kwargs={'y': torch.zeros([batch_size], device=device, dtype=torch.long)},
+        model_kwargs={'y': None},
         cond_fn=cond_fn,
         progress=True,
         skip_timesteps=skip_timesteps,
         init_image=init,
-        randomize_class=True,
+        randomize_class=False,
     )
 
     for j, sample in tqdm.tqdm(enumerate(samples)):
