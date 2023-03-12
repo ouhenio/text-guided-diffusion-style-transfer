@@ -9,11 +9,20 @@ Some stuff to take into account:
   - [DDPM + CLIP notebook](https://colab.research.google.com/drive/1V66mUeJbXrTuQITvJunvnWVn96FEbSI3#scrollTo=X5gODNAMEUCR).
   - Code [reference of directional loss](https://github.com/rinongal/StyleGAN-nada/blob/main/ZSSGAN/criteria/clip_loss.py) (eq 8).
   - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
-  - wtf does the noise estimator come from?
+  - wtf does the noise estimator come from? -> it's the unet
 
 ---
 
-To download the unconditional diffusion model, use:
+## Setup project
+
+Install dependencies:
+
 ```console
-wget -O unconditional_diffusion https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt
+pip install -e ./CLIP & pip install -e ./guided-diffusion
+```
+
+To download the unconditional diffusion model, run (it weights 2.06GB):
+
+```console
+wget -O unconditional_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt
 ```
