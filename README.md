@@ -21,10 +21,10 @@ Install dependencies:
 pip install -e ./CLIP & pip install -e ./guided-diffusion
 ```
 
-To download the unconditional diffusion model, run (it weights 2.06GB):
+Download the unconditional diffusion model, run (weights 2.06GB):
 
 ```console
 wget -O unconditional_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt
 ```
 
-If all went smooth, then you should be able to run `main.py` without any troubles.
+If all went smoothly, you should be able to run `main.py` without any problems.
