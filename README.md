@@ -10,3 +10,10 @@ Some stuff to take into account:
   - Code [reference of directional loss](https://github.com/rinongal/StyleGAN-nada/blob/main/ZSSGAN/criteria/clip_loss.py) (eq 8).
   - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
   - wtf does the noise estimator come from?
+
+---
+
+To download the unconditional diffusion model, use:
+```console
+wget -O unconditional_diffusion https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt
+```
