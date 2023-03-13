@@ -82,6 +82,7 @@ def tv_loss(input):
     y_diff = input[..., 1:, :-1] - input[..., :-1, :-1]
     return (x_diff**2 + y_diff**2).mean([1, 2, 3])
 
+# to do: see how they convert this to one value
 def directional_loss(x, x_t, p_source, p_target):
     x = clip_preprocess(x).unsqueeze(0).to(device)
     x = clip_model.encode_image(x)
