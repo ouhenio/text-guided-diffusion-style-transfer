@@ -82,44 +82,25 @@ def tv_loss(input):
     y_diff = input[..., 1:, :-1] - input[..., :-1, :-1]
     return (x_diff**2 + y_diff**2).mean([1, 2, 3])
 
-# to do: see how they convert this to one value
 def directional_loss(x, x_t, p_source, p_target):
-    x = clip_preprocess(x).unsqueeze(0).to(device)
-    x = clip_model.encode_image(x)
-    x_t = clip_preprocess(x_t).unsqueeze(0).to(device)
-    x_t = clip_model.encode_image(x_t)
-    p_source = clip_model.encode_text(clip.tokenize(p_source).to(device)).float()
-    p_target = clip_model.encode_text(clip.tokenize(p_target).to(device)).float()
+    # x = clip_preprocess(x).unsqueeze(0).to(device)
+    # x = clip_model.encode_image(x).float()
+    # x_t = clip_preprocess(x_t).unsqueeze(0).to(device)
+    # x_t = clip_model.encode_image(x_t).float()
+    # p_source = clip_model.encode_text(clip.tokenize(p_source).to(device)).float()
+    # p_target = clip_model.encode_text(clip.tokenize(p_target).to(device)).float()
     img_diff = x - x_t
     text_diff = p_source - p_target
-    norm = (img_diff * text_diff) / (torch.norm(img_diff) * torch.norm(text_diff))
-    return 1 - norm.mean()
-
-# Conditioning functions
-
-def cond_fn(x, t, y=None):
-    with torch.enable_grad():
-        x = x.detach().requires_grad_()
-        n = x.shape[0]
-        my_t = torch.ones([n], device=device, dtype=torch.long) * cur_t
-        out = diffusion.p_mean_variance(model, x, my_t, clip_denoised=False, model_kwargs={'y': y})
-        fac = diffusion.sqrt_one_minus_alphas_cumprod[cur_t]
-        x_in = out['pred_xstart'] * fac + x * (1 - fac)
-        clip_in = normalize(make_cutouts(x_in.add(1).div(2)))
-        image_embeds = clip_model.encode_image(clip_in).float().view([cutn, n, -1])
-        dists = spherical_dist_loss(image_embeds, text_embed_target.unsqueeze(0))
-        losses = dists.mean(0)
-        tv_losses = tv_loss(x_in)
-        dir_loss = directional_loss()
-        loss = losses.sum() * clip_guidance_scale + tv_losses.sum() * tv_scale
-        return -torch.autograd.grad(loss, x)[0]
+    # todo: check f this is the correct way to compute the value
+    norm = torch.matmul(img_diff.view(1,-1), text_diff.view(-1,1)) / (torch.norm(img_diff) * torch.norm(text_diff))
+    return 1 - norm
 
 # Run clip-guided diffusion
 
 p_source = "painting"
 p_target = "pixar"
 batch_size = 1
-clip_guidance_scale = 1000
+clip_guidance_scale = 1
 tv_scale = 150
 skip_timesteps = 500 # this should have a value between 200-500 when using a init img
 cutn = 42
@@ -138,39 +119,58 @@ cur_t = None
 init_image_path = "elin.jpg"
 init_image = Image.open(init_image_path).convert('RGB')
 init_image = init_image.resize((model_config['image_size'], model_config['image_size']), Image.LANCZOS)
+init_image_embedding = clip_preprocess(init_image).unsqueeze(0).to(device)
+init_image_embedding = clip_model.encode_image(init_image_embedding).float()
 init_image_tensor = TF.to_tensor(init_image).to(device).unsqueeze(0).mul(2).sub(1)
 
-init_image_path = "elin.jpg"
-init_image = Image.open(init_image_path).convert('RGB')
-init_image_2 = init_image.resize((model_config['image_size'], model_config['image_size']), Image.LANCZOS)
+if model_config['timestep_respacing'].startswith('ddim'):
+    sample_fn = diffusion.ddim_sample_loop_progressive
+else:
+    sample_fn = diffusion.p_sample_loop_progressive
 
-print(directional_loss(init_image, init_image_2, p_source, p_target))
+# Conditionin function
 
-# if model_config['timestep_respacing'].startswith('ddim'):
-#     sample_fn = diffusion.ddim_sample_loop_progressive
-# else:
-#     sample_fn = diffusion.p_sample_loop_progressive
+def cond_fn(x, t, y=None):
+    with torch.enable_grad():
+        x = x.detach().requires_grad_()
+        n = x.shape[0]
+        my_t = torch.ones([n], device=device, dtype=torch.long) * cur_t
+        out = diffusion.p_mean_variance(model, x, my_t, clip_denoised=False, model_kwargs={'y': y})
+        fac = diffusion.sqrt_one_minus_alphas_cumprod[cur_t]
+        x_in = out['pred_xstart'] * fac + x * (1 - fac)
+        resized_x_in = F.interpolate(x_in, size=(clip_size, clip_size), mode='bilinear', align_corners=False)
+        x_t = clip_model.encode_image(resized_x_in).float()
+        clip_in = normalize(make_cutouts(x_in.add(1).div(2)))
+        image_embeds = clip_model.encode_image(clip_in).float().view([cutn, n, -1])
+        dists = spherical_dist_loss(image_embeds, text_embed_target.unsqueeze(0))
+        losses = dists.mean(0)
+        dir_loss = directional_loss(init_image_embedding, x_t, text_embed_source, text_embed_target)
+        # original loss
+        # tv_losses = tv_loss(x_in)
+        # loss = losses.sum() * clip_guidance_scale + tv_losses.sum() * tv_scale
+        loss = losses.sum() * clip_guidance_scale + dir_loss
+        return -torch.autograd.grad(loss, x)[0]
 
-# for i in range(n_batches):
-#     cur_t = diffusion.num_timesteps - skip_timesteps - 1
+for i in range(n_batches):
+    cur_t = diffusion.num_timesteps - skip_timesteps - 1
 
-#     samples = sample_fn(
-#         model,
-#         (batch_size, 3, model_config['image_size'], model_config['image_size']),
-#         clip_denoised=False,
-#         model_kwargs={'y': None},
-#         cond_fn=cond_fn,
-#         progress=True,
-#         skip_timesteps=skip_timesteps,
-#         init_image=init_image_tensor,
-#         randomize_class=False,
-#     )
+    samples = sample_fn(
+        model,
+        (batch_size, 3, model_config['image_size'], model_config['image_size']),
+        clip_denoised=False,
+        model_kwargs={'y': None},
+        cond_fn=cond_fn,
+        progress=True,
+        skip_timesteps=skip_timesteps,
+        init_image=init_image_tensor,
+        randomize_class=False,
+    )
 
-#     for j, sample in tqdm.tqdm(enumerate(samples)):
-#         cur_t -= 1
-#         if j % 100 == 0 or cur_t == -1:
-#             print()
-#             for k, image in enumerate(sample['pred_xstart']):
-#                 filename = f'samples/progress_{i * batch_size + k:05}.png'
-#                 TF.to_pil_image(image.add(1).div(2).clamp(0, 1)).save(filename)
+    for j, sample in tqdm.tqdm(enumerate(samples)):
+        cur_t -= 1
+        if j % 100 == 0 or cur_t == -1:
+            print()
+            for k, image in enumerate(sample['pred_xstart']):
+                filename = f'samples/progress_{i * batch_size + k:05}.png'
+                TF.to_pil_image(image.add(1).div(2).clamp(0, 1)).save(filename)
 
