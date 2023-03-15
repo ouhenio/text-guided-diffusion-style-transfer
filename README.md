@@ -39,6 +39,7 @@ Here is some stuff I need to take into account:
   - All the images are resized to 256 × 256 for the diffusion models. For patch-based guidance, they randomly crop 96 patches from a source image and then apply perspective augmentation and affine transformation.
   - Reference of a [DDPM + CLIP notebook](https://colab.research.google.com/drive/1V66mUeJbXrTuQITvJunvnWVn96FEbSI3#scrollTo=X5gODNAMEUCR).
   - Code [reference of directional loss](https://github.com/rinongal/StyleGAN-nada/blob/main/ZSSGAN/criteria/clip_loss.py) (eq 8).
+  - Rreference of the [patch-based CLIP loss ](https://github.com/cyclomon/CLIPstyler) they applied to global an directional loss.
   - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
   - They mention a noise estimator to exctract features from, it's basically the unet.
   - [Reference to global clip loss mentioned in the paper](https://github.com/orpatashnik/StyleCLIP/blob/main/criteria/clip_loss.py)

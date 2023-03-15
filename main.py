@@ -68,27 +68,11 @@ class MakeCutouts(nn.Module):
             cutouts.append(F.adaptive_avg_pool2d(cutout, self.cut_size))
         return torch.cat(cutouts)
 
-
-def spherical_dist_loss(x, y):
-    x = F.normalize(x, dim=-1)
-    y = F.normalize(y, dim=-1)
-    return (x - y).norm(dim=-1).div(2).arcsin().pow(2).mul(2)
-
-
-def tv_loss(input):
-    """L2 total variation loss, as in Mahendran et al."""
-    input = F.pad(input, (0, 1, 0, 1), 'replicate')
-    x_diff = input[..., :-1, 1:] - input[..., :-1, :-1]
-    y_diff = input[..., 1:, :-1] - input[..., :-1, :-1]
-    return (x_diff**2 + y_diff**2).mean([1, 2, 3])
+def global_loss(image, prompt):
+    similarity = 1 - clip_model(image, prompt)[0] / 100
+    return similarity
 
 def directional_loss(x, x_t, p_source, p_target):
-    # x = clip_preprocess(x).unsqueeze(0).to(device)
-    # x = clip_model.encode_image(x).float()
-    # x_t = clip_preprocess(x_t).unsqueeze(0).to(device)
-    # x_t = clip_model.encode_image(x_t).float()
-    # p_source = clip_model.encode_text(clip.tokenize(p_source).to(device)).float()
-    # p_target = clip_model.encode_text(clip.tokenize(p_target).to(device)).float()
     img_diff = x - x_t
     text_diff = p_source - p_target
     # todo: check f this is the correct way to compute the value
@@ -97,12 +81,12 @@ def directional_loss(x, x_t, p_source, p_target):
 
 # Run clip-guided diffusion
 
-p_source = "painting"
-p_target = "pixar"
+p_source = "portrait of a woman"
+p_target = "a heavy metal singer, dark, black"
 batch_size = 1
 clip_guidance_scale = 1
 tv_scale = 150
-skip_timesteps = 500 # this should have a value between 200-500 when using a init img
+skip_timesteps = 300 # this should have a value between 200-500 when using a init img
 cutn = 42
 cut_pow = 0.5
 n_batches = 1
@@ -140,15 +124,9 @@ def cond_fn(x, t, y=None):
         x_in = out['pred_xstart'] * fac + x * (1 - fac)
         resized_x_in = F.interpolate(x_in, size=(clip_size, clip_size), mode='bilinear', align_corners=False)
         x_t = clip_model.encode_image(resized_x_in).float()
-        clip_in = normalize(make_cutouts(x_in.add(1).div(2)))
-        image_embeds = clip_model.encode_image(clip_in).float().view([cutn, n, -1])
-        dists = spherical_dist_loss(image_embeds, text_embed_target.unsqueeze(0))
-        losses = dists.mean(0)
+        g_loss = global_loss(resized_x_in, clip.tokenize(p_target).to(device))
         dir_loss = directional_loss(init_image_embedding, x_t, text_embed_source, text_embed_target)
-        # original loss
-        # tv_losses = tv_loss(x_in)
-        # loss = losses.sum() * clip_guidance_scale + tv_losses.sum() * tv_scale
-        loss = losses.sum() * clip_guidance_scale + dir_loss
+        loss = g_loss + dir_loss
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
@@ -168,8 +146,8 @@ for i in range(n_batches):
 
     for j, sample in tqdm.tqdm(enumerate(samples)):
         cur_t -= 1
-        if j % 100 == 0 or cur_t == -1:
-            print()
+        if j % 25 == 0 or cur_t == -1:
+            # print()
             for k, image in enumerate(sample['pred_xstart']):
                 filename = f'samples/progress_{i * batch_size + k:05}.png'
                 TF.to_pil_image(image.add(1).div(2).clamp(0, 1)).save(filename)
