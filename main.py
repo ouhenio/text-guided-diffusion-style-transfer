@@ -16,7 +16,7 @@ model_config.update({
     'class_cond': False,
     'diffusion_steps': 1000,
     'rescale_timesteps': True,
-    'timestep_respacing': '1000',
+    'timestep_respacing': '50', # see sampling scheme in 4.1
     'image_size': 256,
     'learn_sigma': True,
     'noise_schedule': 'linear',
@@ -69,15 +69,30 @@ class MakeCutouts(nn.Module):
         return torch.cat(cutouts)
 
 def global_loss(image, prompt):
-    similarity = 1 - clip_model(image, prompt)[0] / 100
+    similarity = 1 - clip_model(image, prompt)[0] / 100 # clip returns the cosine similarity times 100
     return similarity
 
 def directional_loss(x, x_t, p_source, p_target):
-    img_diff = x - x_t
-    text_diff = p_source - p_target
-    # todo: check f this is the correct way to compute the value
-    norm = torch.matmul(img_diff.view(1,-1), text_diff.view(-1,1)) / (torch.norm(img_diff) * torch.norm(text_diff))
-    return 1 - norm
+    encoded_image_diff = x - x_t
+    encoded_text_diff = p_source - p_target
+    cosine_similarity = torch.nn.functional.cosine_similarity(
+        encoded_image_diff,
+        encoded_text_diff,
+        dim=-1
+    )
+    return 1 - cosine_similarity
+
+def cut_loss(x, x_t):
+    pass
+
+def feature_loss(x, x_t):
+    pass
+
+def pixel_loss(x, x_t):
+    pass
+
+def content_loss(x, x_t):
+    return cut_loss(x, x_t) + feature_loss(x, x_t) + pixel_loss(x, x_t)
 
 # Run clip-guided diffusion
 
@@ -85,8 +100,7 @@ p_source = "portrait of a woman"
 p_target = "a heavy metal singer, dark, black"
 batch_size = 1
 clip_guidance_scale = 1
-tv_scale = 150
-skip_timesteps = 300 # this should have a value between 200-500 when using a init img
+skip_timesteps = 25 # see sampling scheme in 4.1
 cutn = 42
 cut_pow = 0.5
 n_batches = 1
@@ -112,7 +126,7 @@ if model_config['timestep_respacing'].startswith('ddim'):
 else:
     sample_fn = diffusion.p_sample_loop_progressive
 
-# Conditionin function
+# Conditioning function
 
 def cond_fn(x, t, y=None):
     with torch.enable_grad():
