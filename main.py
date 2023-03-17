@@ -5,7 +5,7 @@ import tqdm
 from PIL import Image
 from torch import nn
 from torch.nn import functional as F
-from torchvision import transforms
+from torchvision import transforms, models
 from torchvision.transforms import functional as TF
 
 from guided_diffusion.script_util import create_model_and_diffusion, model_and_diffusion_defaults
@@ -46,27 +46,12 @@ clip_size = clip_model.visual.input_resolution
 normalize = transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
                                  std=[0.26862954, 0.26130258, 0.27577711])
 
-# Define clip-related functions
+VGG = models.vgg19(pretrained=True).features
+VGG.to(device)
+for parameter in VGG.parameters():
+    parameter.requires_grad_(False)
 
-class MakeCutouts(nn.Module):
-    def __init__(self, cut_size, cutn, cut_pow=1.):
-        super().__init__()
-        self.cut_size = cut_size
-        self.cutn = cutn
-        self.cut_pow = cut_pow
-
-    def forward(self, input):
-        sideY, sideX = input.shape[2:4]
-        max_size = min(sideX, sideY)
-        min_size = min(sideX, sideY, self.cut_size)
-        cutouts = []
-        for _ in range(self.cutn):
-            size = int(torch.rand([])**self.cut_pow * (max_size - min_size) + min_size)
-            offsetx = torch.randint(0, sideX - size + 1, ())
-            offsety = torch.randint(0, sideY - size + 1, ())
-            cutout = input[:, :, offsety:offsety + size, offsetx:offsetx + size]
-            cutouts.append(F.adaptive_avg_pool2d(cutout, self.cut_size))
-        return torch.cat(cutouts)
+# Define loss-related functions
 
 def global_loss(image, prompt):
     similarity = 1 - clip_model(image, prompt)[0] / 100 # clip returns the cosine similarity times 100
@@ -85,8 +70,35 @@ def directional_loss(x, x_t, p_source, p_target):
 def cut_loss(x, x_t):
     pass
 
+def get_features(image, model, layers=None):
+
+    if layers is None:
+        layers = {'0': 'conv1_1',  
+                  '5': 'conv2_1',  
+                  '10': 'conv3_1', 
+                  '19': 'conv4_1', 
+                  '21': 'conv4_2', 
+                  '28': 'conv5_1',
+                  '31': 'conv5_2'
+                 }  
+    features = {}
+    x = image
+    for name, layer in model._modules.items():
+        x = layer(x)   
+        if name in layers:
+            features[layers[name]] = x
+    
+    return features
+
 def feature_loss(x, x_t):
-    pass
+    x_features = get_features(x, VGG)
+    x_t_features = get_features(x_t, VGG)
+
+    loss = 0
+    loss += torch.mean((x_features['conv4_2'] - x_t_features['conv4_2']) ** 2)
+    loss += torch.mean((x_features['conv5_2'] - x_t_features['conv5_2']) ** 2)
+
+    return loss
 
 def pixel_loss(x, x_t):
     pass
@@ -96,8 +108,8 @@ def content_loss(x, x_t):
 
 # Run clip-guided diffusion
 
-p_source = "portrait of a woman"
-p_target = "a heavy metal singer, dark, black"
+p_source = "portrait"
+p_target = "death metal singer"
 batch_size = 1
 clip_guidance_scale = 1
 skip_timesteps = 25 # see sampling scheme in 4.1 (t0)
@@ -136,6 +148,15 @@ patcher = transforms.Compose([
     affine_transfomer
 ])
 
+def img_normalize(image):
+    mean=torch.tensor([0.485, 0.456, 0.406]).to(device)
+    std=torch.tensor([0.229, 0.224, 0.225]).to(device)
+    mean = mean.view(1,-1,1,1)
+    std = std.view(1,-1,1,1)
+
+    image = (image-mean)/std
+    return image
+
 
 # Conditioning function
 
@@ -151,7 +172,9 @@ def cond_fn(x, t, y=None):
         x_in_patches_embeddings = clip_model.encode_image(x_in_patches).float()
         g_loss = global_loss(x_in_patches, text_target_tokens)
         dir_loss = directional_loss(init_image_embedding, x_in_patches_embeddings, text_embed_source, text_embed_target)
-        loss = g_loss + dir_loss
+        feat_loss = feature_loss(img_normalize(init_image_tensor), img_normalize(x_in))
+
+        loss = (g_loss + dir_loss) * 3000 + feat_loss * 100
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
