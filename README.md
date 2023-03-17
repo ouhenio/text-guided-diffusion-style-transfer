@@ -11,7 +11,7 @@ This is my attempt at implementing [Text-Guided Diffusion Image Style Transfer w
 - [x] Add directional loss.
 - [x] Add patch-based loss
 - [x] Add feature loss.
-- [ ] Add pixel loss.
+- [x] Add pixel loss.
 - [ ] Add CUT loss.
 - [ ] Test with Wikiart dataset.
 

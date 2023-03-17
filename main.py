@@ -101,7 +101,8 @@ def feature_loss(x, x_t):
     return loss
 
 def pixel_loss(x, x_t):
-    pass
+    loss = nn.MSELoss()
+    return loss(x, x_t)
 
 def content_loss(x, x_t):
     return cut_loss(x, x_t) + feature_loss(x, x_t) + pixel_loss(x, x_t)
@@ -173,8 +174,9 @@ def cond_fn(x, t, y=None):
         g_loss = global_loss(x_in_patches, text_target_tokens)
         dir_loss = directional_loss(init_image_embedding, x_in_patches_embeddings, text_embed_source, text_embed_target)
         feat_loss = feature_loss(img_normalize(init_image_tensor), img_normalize(x_in))
+        mse_loss = pixel_loss(init_image_tensor, x_in)
 
-        loss = (g_loss + dir_loss) * 3000 + feat_loss * 100
+        loss = (g_loss + dir_loss) * 3000 + feat_loss * 100 + mse_loss * 100
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
