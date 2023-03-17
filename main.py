@@ -16,7 +16,7 @@ model_config.update({
     'class_cond': False,
     'diffusion_steps': 1000,
     'rescale_timesteps': True,
-    'timestep_respacing': '50', # see sampling scheme in 4.1
+    'timestep_respacing': '50', # see sampling scheme in 4.1 (T')
     'image_size': 256,
     'learn_sigma': True,
     'noise_schedule': 'linear',
@@ -70,7 +70,7 @@ class MakeCutouts(nn.Module):
 
 def global_loss(image, prompt):
     similarity = 1 - clip_model(image, prompt)[0] / 100 # clip returns the cosine similarity times 100
-    return similarity
+    return similarity.mean()
 
 def directional_loss(x, x_t, p_source, p_target):
     encoded_image_diff = x - x_t
@@ -80,7 +80,7 @@ def directional_loss(x, x_t, p_source, p_target):
         encoded_text_diff,
         dim=-1
     )
-    return 1 - cosine_similarity
+    return (1 - cosine_similarity).mean()
 
 def cut_loss(x, x_t):
     pass
@@ -100,8 +100,8 @@ p_source = "portrait of a woman"
 p_target = "a heavy metal singer, dark, black"
 batch_size = 1
 clip_guidance_scale = 1
-skip_timesteps = 25 # see sampling scheme in 4.1
-cutn = 42
+skip_timesteps = 25 # see sampling scheme in 4.1 (t0)
+cutn = 96
 cut_pow = 0.5
 n_batches = 1
 seed = 17
@@ -111,8 +111,7 @@ if seed is not None:
 
 text_embed_source = clip_model.encode_text(clip.tokenize(p_source).to(device)).float()
 text_embed_target = clip_model.encode_text(clip.tokenize(p_target).to(device)).float()
-make_cutouts = MakeCutouts(clip_size, cutn, cut_pow)
-cur_t = None
+text_target_tokens = clip.tokenize(p_target).to(device)
 
 init_image_path = "elin.jpg"
 init_image = Image.open(init_image_path).convert('RGB')
@@ -126,6 +125,18 @@ if model_config['timestep_respacing'].startswith('ddim'):
 else:
     sample_fn = diffusion.p_sample_loop_progressive
 
+# Patcher
+
+resize_cropper = transforms.RandomResizedCrop(size=(clip_size, clip_size))
+affine_transfomer = transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))
+perspective_transformer = transforms.RandomPerspective(distortion_scale=0.6, p=1.0)
+patcher = transforms.Compose([
+    resize_cropper,
+    perspective_transformer,
+    affine_transfomer
+])
+
+
 # Conditioning function
 
 def cond_fn(x, t, y=None):
@@ -136,10 +147,10 @@ def cond_fn(x, t, y=None):
         out = diffusion.p_mean_variance(model, x, my_t, clip_denoised=False, model_kwargs={'y': y})
         fac = diffusion.sqrt_one_minus_alphas_cumprod[cur_t]
         x_in = out['pred_xstart'] * fac + x * (1 - fac)
-        resized_x_in = F.interpolate(x_in, size=(clip_size, clip_size), mode='bilinear', align_corners=False)
-        x_t = clip_model.encode_image(resized_x_in).float()
-        g_loss = global_loss(resized_x_in, clip.tokenize(p_target).to(device))
-        dir_loss = directional_loss(init_image_embedding, x_t, text_embed_source, text_embed_target)
+        x_in_patches = torch.cat([normalize(patcher(x_in.add(1).div(2))) for i in range(cutn)])
+        x_in_patches_embeddings = clip_model.encode_image(x_in_patches).float()
+        g_loss = global_loss(x_in_patches, text_target_tokens)
+        dir_loss = directional_loss(init_image_embedding, x_in_patches_embeddings, text_embed_source, text_embed_target)
         loss = g_loss + dir_loss
         return -torch.autograd.grad(loss, x)[0]
 
