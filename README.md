@@ -7,7 +7,11 @@ This is my attempt at implementing [Text-Guided Diffusion Image Style Transfer w
 - [x] Setup repo with initial dependencies (CLIP + guided diffusion).
 - [x] Add CLIP guidance to unconditional 256 model.
 - [x] Add CLIP guidance over inverted image.
+- [x] Add global loss.
 - [x] Add directional loss.
+- [x] Add patch-based loss
+- [x] Add feature loss.
+- [ ] Add pixel loss.
 - [ ] Add CUT loss.
 - [ ] Test with Wikiart dataset.
 
