@@ -47,3 +47,4 @@ Here is some stuff I need to take into account:
   - [Paper reference for CUT loss](https://arxiv.org/abs/2007.15651).
   - They mention a noise estimator to exctract features from, it's basically the unet.
   - [Reference to global clip loss mentioned in the paper](https://github.com/orpatashnik/StyleCLIP/blob/main/criteria/clip_loss.py)
+  - [Reference of unet feature exctractor](https://github.com/yandex-research/ddpm-segmentation/blob/master/src/feature_extractors.py)
