@@ -69,7 +69,7 @@ def directional_loss(x, x_t, p_source, p_target):
     return (1 - cosine_similarity).mean()
 
 def cut_loss(x, x_t):
-    pass
+    return 0
 
 def get_features(image, model, layers=None):
 
@@ -111,7 +111,7 @@ def content_loss(x, x_t):
 # Run clip-guided diffusion
 
 p_source = "portrait"
-p_target = "death metal singer"
+p_target = "cubism"
 batch_size = 1
 clip_guidance_scale = 1
 skip_timesteps = 25 # see sampling scheme in 4.1 (t0)
@@ -177,15 +177,18 @@ def cond_fn(x, t, y=None):
         out = diffusion.p_mean_variance(model, x, my_t, clip_denoised=False, model_kwargs={'y': y})
         fac = diffusion.sqrt_one_minus_alphas_cumprod[cur_t]
         x_in = out['pred_xstart'] * fac + x * (1 - fac)
-        feature_extractor.get_activations() # unet features
         x_in_patches = torch.cat([normalize(patcher(x_in.add(1).div(2))) for i in range(cutn)])
         x_in_patches_embeddings = clip_model.encode_image(x_in_patches).float()
         g_loss = global_loss(x_in_patches, text_target_tokens)
         dir_loss = directional_loss(init_image_embedding, x_in_patches_embeddings, text_embed_source, text_embed_target)
         feat_loss = feature_loss(img_normalize(init_image_tensor), img_normalize(x_in))
         mse_loss = pixel_loss(init_image_tensor, x_in)
+        x_t_features = feature_extractor.get_activations() # unet features
+        model(init_image_tensor, t)
+        x_0_features = feature_extractor.get_activations() # unet features
+        zecon_loss = cut_loss(x_0_features, x_t_features)
 
-        loss = (g_loss + dir_loss) * 3000 + feat_loss * 100 + mse_loss * 100
+        loss = (g_loss + dir_loss) * 5000 + feat_loss * 100 + mse_loss * 100 + zecon_loss
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
