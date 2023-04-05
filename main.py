@@ -82,7 +82,7 @@ class DiffuserStyleTransfer:
     
     # Image patcher
     def load_patcher(self):
-        resize_cropper = transforms.RandomResizedCrop(size=(self.clip_size, self.clip_size))
+        resize_cropper = transforms.RandomResizedCrop(size=(self.clip_size, self.clip_size), scale=(0.03, 0.05))
         affine_transfomer = transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))
         perspective_transformer = transforms.RandomPerspective(distortion_scale=0.6, p=1.0)
         return transforms.Compose([
@@ -159,9 +159,6 @@ class DiffuserStyleTransfer:
     def pixel_loss(self, x, x_t):
         loss = nn.MSELoss()
         return loss(x, x_t)
-
-    def content_loss(self, x, x_t):
-        return self.zecon_loss(x, x_t) + self.feature_loss(x, x_t) + self.pixel_loss(x, x_t)
     
     def load_initial_image(self, init_image_path):
         init_image = Image.open(init_image_path).convert('RGB')
@@ -192,21 +189,39 @@ class DiffuserStyleTransfer:
         x_in = out['pred_xstart'] * fac + x * (1 - fac)
         x_in_patches = torch.cat([self.normalize(self.patcher(x_in.add(1).div(2))) for i in range(self.cutn)])
         x_in_patches_embeddings = self.clip_model.encode_image(x_in_patches).float()
-        g_loss = self.global_loss(x_in_patches, self.text_target_tokens)
-        dir_loss = self.directional_loss(self.init_image_embedding, x_in_patches_embeddings, self.text_embed_source, self.text_embed_target)
-        feat_loss = self.feature_loss(img_normalize(self.init_image_tensor, self.device), img_normalize(x_in, self.device))
-        mse_loss = self.pixel_loss(self.init_image_tensor, x_in)
+        g_loss = self.global_loss_weight * self.global_loss(x_in_patches, self.text_target_tokens)
+        dir_loss = self.directional_loss_weight * self.directional_loss(self.init_image_embedding, x_in_patches_embeddings, self.text_embed_source, self.text_embed_target)
+        feat_loss = self.feature_loss_weight * self.feature_loss(img_normalize(self.init_image_tensor, self.device), img_normalize(x_in, self.device))
+        mse_loss = self.pixel_loss_weight * self.pixel_loss(self.init_image_tensor, x_in)
         x_t_features = self.feature_extractor.get_activations() # unet features
         self.model(self.init_image_tensor, t)
         x_0_features = self.feature_extractor.get_activations() # unet features
-        z_loss = self.zecon_loss(x_0_features, x_t_features)
+        z_loss = self.zecon_loss_weight * self.zecon_loss(x_0_features, x_t_features)
 
-        loss = g_loss * 5000 + dir_loss * 5000 + feat_loss * 100 + mse_loss * 100 + z_loss * 1000
+        loss = g_loss + dir_loss + feat_loss + mse_loss + z_loss
         return -torch.autograd.grad(loss, x)[0]
 
-    def run_diffusion(self, n_batches, batch_size, p_source, p_target, init_image_path, seed=None):
+    def run_diffusion(
+            self,
+            n_batches,
+            batch_size,
+            p_source,
+            p_target,
+            init_image_path,
+            global_loss_weight,
+            directional_loss_weight,
+            feature_loss_weight,
+            pixel_loss_weight,
+            zecon_loss_weight,
+            seed=None
+        ):
         self.text_embed_source, self.text_embed_target, self.text_target_tokens = self.setup_text_embeddings(seed, p_source, p_target)
         self.init_image_embedding, self.init_image_tensor = self.load_initial_image(init_image_path)
+        self.global_loss_weight = global_loss_weight
+        self.directional_loss_weight = directional_loss_weight
+        self.feature_loss_weight = feature_loss_weight
+        self.pixel_loss_weight = pixel_loss_weight
+        self.zecon_loss_weight = zecon_loss_weight
         if self.model_config['timestep_respacing'].startswith('ddim'):
             sample_fn = self.diffusion.ddim_sample_loop_progressive
         else:
@@ -261,8 +276,13 @@ if __name__ == "__main__":
     dst.run_diffusion(
         n_batches=1,
         batch_size=1,
-        p_source="portrait",
-        p_target="pixar",
-        init_image_path="elin.jpg",
+        p_source="painting",
+        p_target="photo",
+        init_image_path="julia.jpg",
+        global_loss_weight=20000,
+        directional_loss_weight=20000,
+        feature_loss_weight=10,
+        pixel_loss_weight=1000,
+        zecon_loss_weight=1000,
         seed=17
     )
