@@ -68,8 +68,36 @@ def directional_loss(x, x_t, p_source, p_target):
     )
     return (1 - cosine_similarity).mean()
 
-def cut_loss(x, x_t):
-    return 0
+def zecon_loss(x0_features_list, x0_t_features_list, temperature=0.07):
+    loss_sum = 0
+    num_layers = len(x0_features_list)
+
+    for x0_features, x0_t_features in zip(x0_features_list, x0_t_features_list):
+        batch_size, feature_dim, h, w = x0_features.size()
+        x0_features = x0_features.view(batch_size, feature_dim, -1)
+        x0_t_features = x0_t_features.view(batch_size, feature_dim, -1)
+
+        # Compute the similarity matrix
+        sim_matrix = torch.einsum('bci,bcj->bij', x0_features, x0_t_features)
+        sim_matrix = sim_matrix / temperature
+
+        # Create positive and negative masks
+        pos_mask = torch.eye(h * w, device=sim_matrix.device).unsqueeze(0).bool()
+        neg_mask = ~pos_mask
+
+        # Compute the loss using cross-entropy
+        logits = sim_matrix - torch.max(sim_matrix, dim=1, keepdim=True)[0]
+        labels = torch.arange(h * w, device=logits.device)
+        logits_1d = logits.view(-1)[neg_mask.view(-1)]
+        labels_1d = labels.repeat(batch_size * (h * w - 1)).unsqueeze(0).to(torch.float)
+        layer_loss = F.cross_entropy(logits_1d.view(batch_size, -1), labels_1d, reduction='mean')
+
+        loss_sum += layer_loss
+
+    # Average the loss across layers
+    loss = loss_sum / num_layers
+
+    return loss
 
 def get_features(image, model, layers=None):
 
@@ -111,11 +139,11 @@ def content_loss(x, x_t):
 # Run clip-guided diffusion
 
 p_source = "portrait"
-p_target = "cubism"
+p_target = "pixar"
 batch_size = 1
 clip_guidance_scale = 1
 skip_timesteps = 25 # see sampling scheme in 4.1 (t0)
-cutn = 96
+cutn = 32
 cut_pow = 0.5
 n_batches = 1
 seed = 17
@@ -186,9 +214,9 @@ def cond_fn(x, t, y=None):
         x_t_features = feature_extractor.get_activations() # unet features
         model(init_image_tensor, t)
         x_0_features = feature_extractor.get_activations() # unet features
-        zecon_loss = cut_loss(x_0_features, x_t_features)
+        z_loss = zecon_loss(x_0_features, x_t_features)
 
-        loss = (g_loss + dir_loss) * 5000 + feat_loss * 100 + mse_loss * 100 + zecon_loss
+        loss = g_loss * 5000 + dir_loss * 5000 + feat_loss * 100 + mse_loss * 100 + z_loss * 1000
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
