@@ -17,20 +17,29 @@ This is my attempt at implementing [Zero-Shot Contrastive Loss for Text-Guided D
 
 ## Setup project
 
-Install dependencies:
+Clone submodules:
+
+```
+git clone https://github.com/openai/CLIP
+git clone https://github.com/ouhenio/guided-diffusion.git
+```
+
+Install submodules dependencies:
 
 ```console
 pip install -e ./CLIP & pip install -e ./guided-diffusion
 ```
 
-Download the unconditional diffusion model, run (weights 2.06GB):
+Download the unconditional diffusion model (weights 2.06GB):
 
 ```console
 wget -O unconditional_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt
 ```
 
 ## Sampling
+
 Run
+
 ```console
 python main.py
 ```
