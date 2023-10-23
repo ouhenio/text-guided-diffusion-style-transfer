@@ -133,13 +133,10 @@ def pixel_loss(x, x_t):
     loss = nn.MSELoss()
     return loss(x, x_t)
 
-def content_loss(x, x_t):
-    return cut_loss(x, x_t) + feature_loss(x, x_t) + pixel_loss(x, x_t)
-
 # Run clip-guided diffusion
 
 p_source = "portrait"
-p_target = "pixar"
+p_target = "3d render in the style of Pixar"
 batch_size = 1
 clip_guidance_scale = 1
 skip_timesteps = 25 # see sampling scheme in 4.1 (t0)
@@ -216,7 +213,7 @@ def cond_fn(x, t, y=None):
         x_0_features = feature_extractor.get_activations() # unet features
         z_loss = zecon_loss(x_0_features, x_t_features)
 
-        loss = g_loss * 5000 + dir_loss * 5000 + feat_loss * 100 + mse_loss * 100 + z_loss * 1000
+        loss = g_loss * 5000 + dir_loss * 5000 + feat_loss * 100 + mse_loss * 10000 + z_loss * 500
         return -torch.autograd.grad(loss, x)[0]
 
 for i in range(n_batches):
@@ -236,7 +233,7 @@ for i in range(n_batches):
 
     for j, sample in tqdm.tqdm(enumerate(samples)):
         cur_t -= 1
-        if j % 25 == 0 or cur_t == -1:
+        if j % 5 == 0 or cur_t == -1:
             # print()
             for k, image in enumerate(sample['pred_xstart']):
                 filename = f'samples/progress_{i * batch_size + k:05}.png'
