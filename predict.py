@@ -141,7 +141,7 @@ class Predictor(BasePredictor):
             self,
             image: Path = Input(
                 description="Grayscale input image",
-                default="elin.jpg"
+                default="https://github.com/ouhenio/text-guided-diffusion-style-transfer/blob/main/elin.jpg"
             ),
             source_prompt: str = Input(
                 default="a portrait",
