@@ -1,0 +1,12 @@
+build:
+  gpu: true
+  python_version: 3.9
+  run:
+    - "git clone https://github.com/openai/CLIP"
+    - "git clone https://github.com/ouhenio/guided-diffusion.git"
+    - "pip install -e ./CLIP"
+    - "pip install -e ./guided-diffusion"
+    - "mkdir models"
+    - "wget -O models/unconditional_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt"
+
+predict: "predict.py:Predictor"
